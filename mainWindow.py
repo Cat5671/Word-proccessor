@@ -47,7 +47,7 @@ class WordProccessor(QMainWindow, Ui_wordProccessor):
             self.statusBar().showMessage(f"Ошибка сохранения: {e}", 5000)
 
     def open_document(self):
-        file_path, _ = QFileDialog.getSaveFileName(self, "Открыть документ...", "", "Документ Word (*.docx)")
+        file_path, _ = QFileDialog.getOpenFileName(self, "Открыть документ...", "", "Документ Word (*.docx)")
         if file_path:
             try:
                 doc = docx.Document(file_path)
