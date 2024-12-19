@@ -125,8 +125,8 @@ class Ui_wordProccessor(object):
         sizePolicy.setVerticalStretch(0)
         sizePolicy.setHeightForWidth(self.document.sizePolicy().hasHeightForWidth())
         self.document.setSizePolicy(sizePolicy)
-        self.document.setMinimumSize(QtCore.QSize(800, 300))
-        self.document.setMaximumSize(QtCore.QSize(800, 16777215))
+        self.document.setMinimumSize(QtCore.QSize(990, 300))
+        self.document.setMaximumSize(QtCore.QSize(990, 16777215))
         self.document.setStyleSheet("background-color: rgb(255, 255, 255);\n"
 "QMenuBar::item:selected {\n"
 "     background-color: #AAAAAA;\n"
