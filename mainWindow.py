@@ -16,6 +16,17 @@ class WordProccessor(QMainWindow, Ui_wordProccessor):
         self.saveDocumentWhere.triggered.connect(self.save_as_docx)
         self.openDocument.triggered.connect(self.open_document)
         self.addDocument.triggered.connect(self.new_document)
+        self.document.setStyleSheet("""
+            QTextEdit {
+                background-color: #FFFFFF;
+                font-family: 'Calibri', sans-serif;  /* Шрифт, как в Word */
+                font-size: 11pt;  /* Размер шрифта */
+                padding-left: 144px;     /* Отступ слева (1.27 см) */
+                padding-right: 72px;    /* Отступ справа (1.27 см) */
+                padding-top: 96px;      /* Отступ сверху (1.27 см) */
+                padding-bottom: 96px;   /* Отступ снизу (1.27 см) */
+            }
+        """)
 
     def new_document(self):
         self.current_file_path = None
@@ -51,10 +62,17 @@ class WordProccessor(QMainWindow, Ui_wordProccessor):
         if file_path:
             try:
                 doc = docx.Document(file_path)
-                text = ""
 
+                section = doc.sections[0]
+                margins = section.left_margin, section.right_margin, section.top_margin, section.bottom_margin
+                margins_in_pixels = [(margin // 360000) * 48 for margin in margins]
+                self.apply_margins_to_stylesheet(margins_in_pixels)
+
+                text = ""
                 for paragraph in doc.paragraphs:
+
                     text += paragraph.text + "\n"
+
 
                 self.document.setPlainText(text)
                 self.current_file_path = file_path
@@ -62,6 +80,22 @@ class WordProccessor(QMainWindow, Ui_wordProccessor):
 
             except Exception as e:
                 self.QMessageBox.critical(self, "Ошибка", f"Не удалось открыть файл: {e}")
+
+    def apply_margins_to_stylesheet(self, margins_in_pixels):
+        # Устанавливаем отступы для QTextEdit, используя styleSheet
+        left_margin, right_margin, top_margin, bottom_margin = margins_in_pixels
+        print(margins_in_pixels)
+        self.document.setStyleSheet(f"""
+            QTextEdit {{
+                background-color: #FFFFFF;
+                font-family: 'Calibri', sans-serif;
+                font-size: 11pt;
+                padding-left: {left_margin}px;
+                padding-right: {right_margin}px;
+                padding-top: {top_margin}px;
+                padding-bottom: {bottom_margin}px;
+            }}
+        """)
 
 app = QApplication(sys.argv)
 ex = WordProccessor()
