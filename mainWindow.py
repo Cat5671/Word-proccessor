@@ -1,29 +1,35 @@
 import sys
-import docx
-from PyQt5.QtWidgets import QApplication, QWidget, QMainWindow, QLineEdit, QFileDialog, QTextEdit
-from PyQt5 import QtCore, QtGui, QtWidgets
+from PyQt5.QtWidgets import QApplication, QMainWindow, QFileDialog, QTextEdit, QSizePolicy, QMenu, QAction, QVBoxLayout
 from PyQt5.QtCore import Qt
-from layoutWordProccessor import Ui_wordProccessor
+from PyQt5 import QtCore
+
+import layoutWordProccessor
+from layoutWordProccessor import uiWordProccessor
 from docx import Document
-import os
-class Sheet():
+import docx
+
+
+class Sheet(QTextEdit):
     __instance = None
-    def __init__(self, sheetsScrollArea, verticalLayout):
-        self.sheet = QTextEdit(sheetsScrollArea)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Expanding)
+
+    def __init__(self, verticalLayout):
+        super().__init__()
+
+        sizePolicy = QSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(self.sheet.sizePolicy().hasHeightForWidth())
-        self.sheet.setSizePolicy(sizePolicy)
-        self.sheet.setMinimumSize(QtCore.QSize(990, 1400))
-        self.sheet.setMaximumSize(QtCore.QSize(990, 1400))
-        self.sheet.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.sheet.setStyleSheet("background-color: rgb(255, 255, 255);\n"
-                                 "QMenuBar::item:selected {\n"
-                                 "     background-color: #AAAAAA;\n"
-                                 " }")
-        verticalLayout.addWidget(self.sheet)
-        self.sheet.setStyleSheet("""
+        sizePolicy.setHeightForWidth(self.sizePolicy().hasHeightForWidth())
+        self.setSizePolicy(sizePolicy)
+        self.setMinimumSize(QtCore.QSize(990, 1400))
+        self.setMaximumSize(QtCore.QSize(990, 1400))
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setStyleSheet("background-color: rgb(255, 255, 255);\n"
+                           "QMenuBar::item:selected {\n"
+                           "background-color: #AAAAAA;\n"
+                           " }")
+
+        verticalLayout.addWidget(self)
+        self.setStyleSheet("""
                     QTextEdit {
                         background-color: #FFFFFF;
                         font-family: 'Calibri', sans-serif;  /* Шрифт, как в Word */
@@ -32,25 +38,61 @@ class Sheet():
                         padding-right: 72px;    /* Отступ справа (1.27 см) */
                         padding-top: 96px;      /* Отступ сверху (1.27 см) */
                         padding-bottom: 96px;   /* Отступ снизу (1.27 см) */
+                        
                     }
                 """)
-        self.sheet.textChanged.connect(lambda: self.check_text_height(sheetsScrollArea, verticalLayout))
+        self.textChanged.connect(lambda: self.checkTextHeight(verticalLayout))
 
-    def check_text_height(self, sheetsScrollArea, verticalLayout):
-        if self.sheet.cursorRect(self.sheet.textCursor()).y() + self.sheet.cursorRect().height() > 1208 and self.__instance == None:
-            self.__instance = Sheet(sheetsScrollArea, verticalLayout)
+    def checkTextHeight(self, verticalLayout):
+        check = self.cursorRect(self.textCursor()).y() + self.cursorRect().height()
+
+        if check > 1208 and self.__instance is None:
+            self.__instance = Sheet(verticalLayout)
+            self.__moveCursor(self.__instance)
+
+        elif check > 1208:
+            self.__moveCursor(self.__instance)
+
+    def __moveCursor(self, sheet):
+        self.cursor = sheet.textCursor()
+        self.cursor.setPosition(0)
+        sheet.setFocus()
+        sheet.setTextCursor(self.cursor)
+
+    def contextMenuEvent(self, event):
+        contextMenu = QMenu(self)
+        addPageHighter = QAction("Добавить страниу выше", self)
+        addPageLower = QAction("Добавить страницу ниже", self)
+        delitePage = QAction("Удалить страницу", self)
+        contextMenu.addAction(addPageHighter)
+        contextMenu.addAction(addPageLower)
+        contextMenu.addAction(delitePage)
+
+        addPageHighter.triggered.connect(self.addPageHight)
+        addPageLower.triggered.connect(self.addPageLowe)
+        delitePage.triggered.connect(self.deliteCurrentPage)
+
+        contextMenu.exec(event.globalPos())
+
+    def addPageHight(self):
+        print("d")
+
+    def addPageLowe(self):
+        print("a")
+
+    def deliteCurrentPage(self):
+        print("d")
 
 
-class WordProccessor(QMainWindow, Ui_wordProccessor):
+
+class wordProccessor(QMainWindow, uiWordProccessor):
     def __init__(self):
         super().__init__()
-        self.setupUi(self)
+        self.setUpUi(self)
         self.resize(800, 600)
         self.current_file_path = None
 
-
-        self.sheet1 = Sheet(self.sheetsScrollArea, self.verticalLayout_3)
-
+        self.sheet1 = Sheet(self.verticalLayout_3)
 
         self.saveDocument.triggered.connect(self.save_fast)
         self.saveDocumentWhere.triggered.connect(self.save_as_docx)
@@ -99,9 +141,7 @@ class WordProccessor(QMainWindow, Ui_wordProccessor):
 
                 text = ""
                 for paragraph in doc.paragraphs:
-
                     text += paragraph.text + "\n"
-
 
                 self.sheet.setPlainText(text)
                 self.current_file_path = file_path
@@ -126,8 +166,10 @@ class WordProccessor(QMainWindow, Ui_wordProccessor):
             }}
         """)
 
+
+
 app = QApplication(sys.argv)
-ex = WordProccessor()
+ex = wordProccessor()
 
 ex.show()
 sys.exit(app.exec_())
