@@ -83,7 +83,6 @@ class Ui_WordProcessor(object):
         self.fonts.addItem("")
         self.fonts.addItem("")
         self.fonts.addItem("")
-        self.fonts.addItem("")
         self.fonts.setItemText(5, "")
         self.menu_layout.addWidget(self.fonts, 0, 5, 1, 1)
         self.font_color = QtWidgets.QComboBox(self.central_widget)

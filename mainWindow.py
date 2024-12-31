@@ -2,6 +2,7 @@ import sys
 from PyQt5.QtWidgets import QApplication, QMainWindow, QFileDialog, QTextEdit, QSizePolicy, QMenu, QAction
 from PyQt5.QtCore import Qt
 from PyQt5 import QtCore
+from PyQt5.QtGui import QFont
 from layoutWordProccessor1 import Ui_WordProcessor
 from docx import Document
 import docx
@@ -29,26 +30,30 @@ class Sheet(QTextEdit):
         self.setStyleSheet("""
                     QTextEdit {
                         background-color: #FFFFFF;
-                        font-family: 'Calibri', sans-serif;  /* Шрифт, как в Word */
-                        font-size: 11pt;  /* Размер шрифта */
                         padding-left: 144px;     /* Отступ слева (1.27 см) */
                         padding-right: 72px;    /* Отступ справа (1.27 см) */
                         padding-top: 96px;      /* Отступ сверху (1.27 см) */
                         padding-bottom: 96px;   /* Отступ снизу (1.27 см) */
+                        
                         
                     }
                 """)
 
         self.textChanged.connect(lambda: self.check_text_height(sheets_layout))
 
+
     def check_text_height(self, sheets_layout):
         check = self.cursorRect(self.textCursor()).y() + self.cursorRect().height()
 
         if check > 1208 and self.__instance is None:
             self.__instance = Sheet(sheets_layout)
+            self.__instance.set_font(self.fontFamily())
+            self.__instance.set_size(self.fontPointSize())
             self.move_cursor(self.__instance)
 
         elif check > 1208:
+            self.__instance.set_font(self.fontFamily())
+            self.__instance.set_size(self.fontPointSize())
             self.move_cursor(self.__instance)
 
     def move_cursor(self, sheet):
@@ -56,6 +61,13 @@ class Sheet(QTextEdit):
         self.cursor.setPosition(0)
         sheet.setFocus()
         sheet.setTextCursor(self.cursor)
+
+    def set_font(self, font):
+        self.setFontFamily(font)
+
+    def set_size(self, font_size):
+        self.setFontPointSize(int(font_size))
+
 
     def contextMenuEvent(self, event):
         context_menu = QMenu(self)
@@ -76,6 +88,9 @@ class WordProcessor(QMainWindow, Ui_WordProcessor):
         self.current_file_path = None
 
         self.sheet = Sheet(self.sheets_layout)
+        self.fonts.currentTextChanged.connect(self.sheet.set_font)
+        self.font_size.currentTextChanged.connect(self.sheet.set_size)
+
 
 
         self.save_document_action.triggered.connect(self.save_fast)
