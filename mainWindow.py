@@ -6,7 +6,8 @@ from PyQt5.QtGui import QColor, QFont
 from layoutWordProccessor1 import Ui_WordProcessor
 from docx import Document
 import docx
-
+from docx.shared import Pt, RGBColor
+from docx.oxml.ns import qn
 
 class Sheet(QTextEdit):
 
@@ -49,12 +50,7 @@ class Sheet(QTextEdit):
 
         if check > 1208 and self.sheet1 is None:
             self.sheet1 = Sheet(sheets_layout)
-            self.sheet1.current_font = self.current_font
-            self.sheet1.current_color = self.current_color
-            self.sheet1.current_size = self.current_size
-            self.sheet1.setFontFamily(self.sheet1.current_font)
-            print(self.sheet1.fontFamily())
-
+            self.apply_styles_to_sheet(self.sheet1)
             self.move_cursor(self.sheet1)
 
         elif check > 1208:
@@ -66,6 +62,15 @@ class Sheet(QTextEdit):
         self.set_underline(self.fontUnderline())
         self.set_bold(self.fontWeight())
         self.set_italic(self.fontItalic())
+    def apply_styles_to_sheet(self, sheet):
+        # Передаем все стили на новый лист
+        sheet.set_font(self.current_font)
+        sheet.set_size(self.current_size)
+        sheet.set_color(self.current_color)
+        sheet.set_underline(self.fontUnderline())
+        sheet.set_bold(self.fontWeight())
+        sheet.set_italic(self.fontItalic())
+
     def move_cursor(self, sheet):
         self.cursor = sheet.textCursor()
         self.cursor.setPosition(0)
@@ -193,11 +198,36 @@ class WordProcessor(QMainWindow, Ui_WordProcessor):
 
     def save_to_path(self, file_path):
         try:
-            doc = Document()
-            text = self.sheet.toPlainText()
+            html_content = self.sheet.toHtml()
 
-            for line in text.splitlines():
-                doc.add_paragraph(line)
+            doc = Document()
+
+            doc.styles['Normal'].font.name = 'Calibri'  # Устанавливаем шрифт по умолчанию
+            doc.styles['Normal']._element.rPr.rFonts.set(qn('w:eastAsia'), 'Calibri')
+
+            from bs4 import BeautifulSoup
+            soup = BeautifulSoup(html_content, "html.parser")
+
+            for line in soup.find_all("p"):
+                paragraph = doc.add_paragraph()
+                for span in line.find_all("span"):
+                    run = paragraph.add_run(span.text)
+                    style = span.attrs.get("style", "")
+                    if "font-size" in style:
+                        size = int(style.split("font-size:")[1].split("pt")[0])
+                        run.font.size = Pt(size)
+                    if "font-family" in style:
+                        font_name = style.split("font-family:")[1].split(";")[0].replace("'", "")
+                        run.font.name = font_name
+                    if "font-weight" in style and "bold" in style.lower():
+                        run.bold = True
+                    if "font-style" in style and "italic" in style.lower():
+                        run.italic = True
+                    if "text-decoration" in style and "underline" in style.lower():
+                        run.underline = True
+                    if "color" in style:
+                        color_value = style.split("color:")[1].split(";")[0].strip()
+                        run.font.color.rgb = RGBColor(int(color_value[1:3], 16), int(color_value[3:5], 16), int(color_value[5:7], 16))
 
             doc.save(file_path)
             self.statusBar().showMessage(f"Файл сохранен: {file_path}", 5000)
@@ -209,36 +239,52 @@ class WordProcessor(QMainWindow, Ui_WordProcessor):
         if file_path:
             try:
                 doc = docx.Document(file_path)
+                html_content = ""
 
                 section = doc.sections[0]
                 margins = section.left_margin, section.right_margin, section.top_margin, section.bottom_margin
                 margins_in_pixels = [(margin // 360000) * 48 for margin in margins]
                 self.apply_margins_to_stylesheet(margins_in_pixels)
 
-                text = ""
                 for paragraph in doc.paragraphs:
-                    text += paragraph.text + "\n"
+                    html_content += "<p>"
+                    for run in paragraph.runs:
+                        style = ""
+                        if run.font.size:
+                            size = run.font.size.pt
+                            style += f"font-size: {size}pt; "
+                        if run.font.name:
+                            style += f"font-family: {run.font.name}; "
+                        if run.font.bold:
+                            style += "font-weight: bold; "
+                        if run.font.italic:
+                            style += "font-style: italic; "
+                        if run.font.underline:
+                            style += "text-decoration: underline; "
+                        if run.font.color.rgb:
+                            rgb = run.font.color.rgb
+                            style += f"color: #{rgb}; "
+                            print(f"color: #{rgb}; ")
+                        html_content += f"<span style='{style}'>{run.text}</span>"
+                    html_content += "</p>"
 
-                self.sheet.setPlainText(text)
+                self.sheet.setHtml(html_content)
                 self.current_file_path = file_path
                 self.statusBar().showMessage(f"Файл открыт: {file_path}", 5000)
-
             except Exception as e:
-                self.QMessageBox.critical(self, "Ошибка", f"Не удалось открыть файл: {e}")
+                self.statusBar().showMessage(f"Ошибка открытия: {e}", 5000)
 
     def apply_margins_to_stylesheet(self, margins_in_pixels):
-        # Устанавливаем отступы для QTextEdit, используя styleSheet
         left_margin, right_margin, top_margin, bottom_margin = margins_in_pixels
-        print(margins_in_pixels)
         self.sheet.setStyleSheet(f"""
-            QTextEdit {{
-                background-color: #FFFFFF;
-                padding-left: {left_margin}px;
-                padding-right: {right_margin}px;
-                padding-top: {top_margin}px;
-                padding-bottom: {bottom_margin}px;
-            }}
-        """)
+                QTextEdit {{
+                    background-color: #FFFFFF;
+                    padding-left: {left_margin}px;
+                    padding-right: {right_margin}px;
+                    padding-top: {top_margin}px;
+                    padding-bottom: {bottom_margin}px;
+                }}
+            """)
 
 
 
