@@ -62,8 +62,8 @@ class Sheet(QTextEdit):
         self.set_underline(self.fontUnderline())
         self.set_bold(self.fontWeight())
         self.set_italic(self.fontItalic())
+
     def apply_styles_to_sheet(self, sheet):
-        # Передаем все стили на новый лист
         sheet.set_font(self.current_font)
         sheet.set_size(self.current_size)
         sheet.set_color(self.current_color)
