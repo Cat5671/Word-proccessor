@@ -2,14 +2,13 @@ import sys
 from PyQt5.QtWidgets import QApplication, QMainWindow, QFileDialog, QTextEdit, QSizePolicy, QMenu, QAction
 from PyQt5.QtCore import Qt
 from PyQt5 import QtCore
-from PyQt5.QtGui import QFont
+from PyQt5.QtGui import QColor, QFont
 from layoutWordProccessor1 import Ui_WordProcessor
 from docx import Document
 import docx
 
 
 class Sheet(QTextEdit):
-    __instance = None
 
     def __init__(self, sheets_layout):
         super().__init__()
@@ -27,6 +26,9 @@ class Sheet(QTextEdit):
                            " }")
 
         sheets_layout.addWidget(self)
+        self.current_font = "MS Shell Dlg 2"
+        self.current_color = "Black"
+        self.current_size = "8"
         self.setStyleSheet("""
                     QTextEdit {
                         background-color: #FFFFFF;
@@ -40,44 +42,116 @@ class Sheet(QTextEdit):
                 """)
 
         self.textChanged.connect(lambda: self.check_text_height(sheets_layout))
-
+        self.sheet1 = None
 
     def check_text_height(self, sheets_layout):
         check = self.cursorRect(self.textCursor()).y() + self.cursorRect().height()
 
-        if check > 1208 and self.__instance is None:
-            self.__instance = Sheet(sheets_layout)
-            self.__instance.set_font(self.fontFamily())
-            self.__instance.set_size(self.fontPointSize())
-            self.move_cursor(self.__instance)
+        if check > 1208 and self.sheet1 is None:
+            self.sheet1 = Sheet(sheets_layout)
+            self.sheet1.current_font = self.current_font
+            self.sheet1.current_color = self.current_color
+            self.sheet1.current_size = self.current_size
+            self.sheet1.setFontFamily(self.sheet1.current_font)
+            print(self.sheet1.fontFamily())
+
+            self.move_cursor(self.sheet1)
 
         elif check > 1208:
-            self.__instance.set_font(self.fontFamily())
-            self.__instance.set_size(self.fontPointSize())
-            self.move_cursor(self.__instance)
+            self.move_cursor(self.sheet1)
 
+        self.set_font("mS Shell Dlg 2")
+        self.set_color("black")
+        self.set_size("7")
+        self.set_underline(self.fontUnderline())
+        self.set_bold(self.fontWeight())
+        self.set_italic(self.fontItalic())
     def move_cursor(self, sheet):
         self.cursor = sheet.textCursor()
         self.cursor.setPosition(0)
         sheet.setFocus()
         sheet.setTextCursor(self.cursor)
 
-    def set_font(self, font):
-        self.setFontFamily(font)
+    def set_font(self, font="mS Shell Dlg 2"):
+        if font != "mS Shell Dlg 2":
+            self.current_font = font
 
-    def set_size(self, font_size):
-        self.setFontPointSize(int(font_size))
+        self.setFontFamily(self.current_font)
+        if self.sheet1 is None:
+            pass
+        else:
+            self.sheet1.set_font(self.current_font)
 
+    def set_size(self, font_size="7"):
+        if font_size != "7":
+            self.current_size = font_size
+
+        self.setFontPointSize(int(self.current_size))
+        if self.sheet1 is None:
+            pass
+        else:
+            self.sheet1.set_font(self.current_size)
+
+    def set_color(self, font_color="Black"):
+        if font_color != "black":
+            self.current_color = font_color
+
+        self.setTextColor(QColor(self.current_color))
+        if self.sheet1 is None:
+            pass
+        else:
+            self.sheet1.set_color(font_color)
+
+    def count_u(self):
+        if self.fontUnderline():
+            self.set_underline(False)
+        else:
+            self.set_underline(True)
+
+    def count_b(self):
+        if self.fontWeight():
+            self.set_bold(False)
+        else:
+            self.set_bold(QFont.Bold)
+
+    def count_i(self):
+        if self.fontItalic():
+            self.set_italic(False)
+        else:
+            self.set_italic(True)
+
+    def set_underline(self, c):
+        self.setFontUnderline(c)
+        if self.sheet1 is None:
+            pass
+        else:
+            self.sheet1.set_underline(c)
+
+    def set_bold(self, c):
+        self.setFontWeight(c)
+        if self.sheet1 is None:
+            pass
+        else:
+            self.sheet1.set_bold(c)
+
+    def set_italic(self, c):
+        self.setFontItalic(c)
+        if self.sheet1 is None:
+            pass
+        else:
+            self.sheet1.set_italic(c)
 
     def contextMenuEvent(self, event):
         context_menu = QMenu(self)
-        add_page_higher_action = QAction("Добавить страниу выше", self)
-        add_page_lower_action = QAction("Добавить страницу ниже", self)
-        delite_page_action = QAction("Удалить страницу", self)
-        context_menu.addAction(add_page_higher_action)
-        context_menu.addAction(add_page_lower_action)
-        context_menu.addAction(delite_page_action)
+        copy_action = QAction("Копировать", self)
+        insert_action = QAction("Вставить", self)
+
+        context_menu.addAction(copy_action)
+        context_menu.addAction(insert_action)
+
+
         context_menu.exec(event.globalPos())
+
 
 
 class WordProcessor(QMainWindow, Ui_WordProcessor):
@@ -90,7 +164,10 @@ class WordProcessor(QMainWindow, Ui_WordProcessor):
         self.sheet = Sheet(self.sheets_layout)
         self.fonts.currentTextChanged.connect(self.sheet.set_font)
         self.font_size.currentTextChanged.connect(self.sheet.set_size)
-
+        self.font_color.currentTextChanged.connect(self.sheet.set_color)
+        self.underline_text_button.clicked.connect(self.sheet.count_u)
+        self.italic_text_button.clicked.connect(self.sheet.count_i)
+        self.bold_text_button.clicked.connect(self.sheet.count_b)
 
 
         self.save_document_action.triggered.connect(self.save_fast)
@@ -156,8 +233,6 @@ class WordProcessor(QMainWindow, Ui_WordProcessor):
         self.sheet.setStyleSheet(f"""
             QTextEdit {{
                 background-color: #FFFFFF;
-                font-family: 'Calibri', sans-serif;
-                font-size: 11pt;
                 padding-left: {left_margin}px;
                 padding-right: {right_margin}px;
                 padding-top: {top_margin}px;
