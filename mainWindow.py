@@ -1,8 +1,9 @@
 import sys
 from PyQt5.QtWidgets import QApplication, QMainWindow, QFileDialog, QTextEdit, QSizePolicy, QMenu, QAction
+from bs4 import BeautifulSoup
 from PyQt5.QtCore import Qt
 from PyQt5 import QtCore
-from PyQt5.QtGui import QColor, QFont
+from PyQt5.QtGui import QColor, QFont, QTextCharFormat
 from layoutWordProccessor1 import Ui_WordProcessor
 from docx import Document
 import docx
@@ -36,17 +37,16 @@ class Sheet(QTextEdit):
                         padding-left: 144px;     /* Отступ слева (1.27 см) */
                         padding-right: 72px;    /* Отступ справа (1.27 см) */
                         padding-top: 96px;      /* Отступ сверху (1.27 см) */
-                        padding-bottom: 96px;   /* Отступ снизу (1.27 см) */
-                        
-                        
+                        padding-bottom: 96px;   /* Отступ снизу (1.27 см) */              
                     }
                 """)
 
         self.textChanged.connect(lambda: self.check_text_height(sheets_layout))
+
         self.sheet1 = None
 
     def check_text_height(self, sheets_layout):
-        check = self.cursorRect(self.textCursor()).y() + self.cursorRect().height()
+        check = self.cursorRect(self.textCursor()).y() + self.cursorRect().height() * 2
 
         if check > 1208 and self.sheet1 is None:
             self.sheet1 = Sheet(sheets_layout)
@@ -54,14 +54,11 @@ class Sheet(QTextEdit):
             self.move_cursor(self.sheet1)
 
         elif check > 1208:
+            self.apply_styles_to_sheet(self.sheet1)
             self.move_cursor(self.sheet1)
 
-        self.set_font("mS Shell Dlg 2")
-        self.set_color("black")
-        self.set_size("7")
-        self.set_underline(self.fontUnderline())
-        self.set_bold(self.fontWeight())
-        self.set_italic(self.fontItalic())
+        else:
+            self.apply_styles_to_sheet(self)
 
     def apply_styles_to_sheet(self, sheet):
         sheet.set_font(self.current_font)
@@ -78,34 +75,36 @@ class Sheet(QTextEdit):
         sheet.setTextCursor(self.cursor)
 
     def set_font(self, font="mS Shell Dlg 2"):
+
         if font != "mS Shell Dlg 2":
             self.current_font = font
 
         self.setFontFamily(self.current_font)
-        if self.sheet1 is None:
-            pass
-        else:
+
+        if self.sheet1 is not None:
             self.sheet1.set_font(self.current_font)
+
+
 
     def set_size(self, font_size="7"):
         if font_size != "7":
             self.current_size = font_size
 
         self.setFontPointSize(int(self.current_size))
-        if self.sheet1 is None:
-            pass
-        else:
+        if self.sheet1 is not None:
             self.sheet1.set_font(self.current_size)
 
-    def set_color(self, font_color="Black"):
+
+    def set_color(self, font_color="black"):
         if font_color != "black":
             self.current_color = font_color
 
-        self.setTextColor(QColor(self.current_color))
-        if self.sheet1 is None:
-            pass
-        else:
-            self.sheet1.set_color(font_color)
+            self.setTextColor(QColor(self.current_color))
+            if self.sheet1 is not None:
+                self.sheet1.set_color(font_color)
+
+
+
 
     def count_u(self):
         if self.fontUnderline():
@@ -154,9 +153,7 @@ class Sheet(QTextEdit):
         context_menu.addAction(copy_action)
         context_menu.addAction(insert_action)
 
-
         context_menu.exec(event.globalPos())
-
 
 
 class WordProcessor(QMainWindow, Ui_WordProcessor):
@@ -173,7 +170,6 @@ class WordProcessor(QMainWindow, Ui_WordProcessor):
         self.underline_text_button.clicked.connect(self.sheet.count_u)
         self.italic_text_button.clicked.connect(self.sheet.count_i)
         self.bold_text_button.clicked.connect(self.sheet.count_b)
-
 
         self.save_document_action.triggered.connect(self.save_fast)
         self.save_document_where_action.triggered.connect(self.save_as_docx)
@@ -205,7 +201,6 @@ class WordProcessor(QMainWindow, Ui_WordProcessor):
             doc.styles['Normal'].font.name = 'Calibri'  # Устанавливаем шрифт по умолчанию
             doc.styles['Normal']._element.rPr.rFonts.set(qn('w:eastAsia'), 'Calibri')
 
-            from bs4 import BeautifulSoup
             soup = BeautifulSoup(html_content, "html.parser")
 
             for line in soup.find_all("p"):

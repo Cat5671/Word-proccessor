@@ -78,7 +78,7 @@ class Ui_WordProcessor(object):
         self.fonts.setMaximumSize(QtCore.QSize(120, 16777215))
         self.fonts.setStyleSheet("background-color: rgb(255, 255, 255);")
         self.fonts.setObjectName("fonts")
-
+        self.fonts.setEditable(False)
 
 
         self.fonts.setItemText(5, "")
