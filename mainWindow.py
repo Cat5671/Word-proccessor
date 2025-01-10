@@ -10,6 +10,7 @@ import docx
 from docx.shared import Pt, RGBColor
 from docx.oxml.ns import qn
 
+
 class Sheet(QTextEdit):
 
     def __init__(self, sheets_layout):
@@ -40,13 +41,26 @@ class Sheet(QTextEdit):
                         padding-bottom: 96px;   /* Отступ снизу (1.27 см) */              
                     }
                 """)
-
+        self.f = -1
         self.textChanged.connect(lambda: self.check_text_height(sheets_layout))
-
+        self.cursorPositionChanged.connect(self.apply_styles_to_current_sheet)
         self.sheet1 = None
 
     def check_text_height(self, sheets_layout):
         check = self.cursorRect(self.textCursor()).y() + self.cursorRect().height() * 2
+        check2 = self.document().size().height()
+        
+        if check2 > 1208 and self.sheet1 is None:
+            self.sheet1 = Sheet(sheets_layout)
+            self.text = self.toPlainText().split("\n")
+            self.sheet1.insertPlainText(self.text.pop())
+            
+        elif check2 > 1208:
+            if check > 1208:
+                self.f -= 1
+            self.text = self.toPlainText().split("\n")
+
+            self.sheet1.insertPlainText("\n" + self.text[len(self.text) + self.f])
 
         if check > 1208 and self.sheet1 is None:
             self.sheet1 = Sheet(sheets_layout)
@@ -57,8 +71,13 @@ class Sheet(QTextEdit):
             self.apply_styles_to_sheet(self.sheet1)
             self.move_cursor(self.sheet1)
 
-        else:
-            self.apply_styles_to_sheet(self)
+    def apply_styles_to_current_sheet(self):
+        self.set_font()
+        self.set_size()
+        self.set_color()
+        self.set_underline(self.fontUnderline())
+        self.set_bold(self.fontWeight())
+        self.set_italic(self.fontItalic())
 
     def apply_styles_to_sheet(self, sheet):
         sheet.set_font(self.current_font)
@@ -76,35 +95,49 @@ class Sheet(QTextEdit):
 
     def set_font(self, font="mS Shell Dlg 2"):
 
-        if font != "mS Shell Dlg 2":
+        if self.textCursor().selectionEnd() == self.textCursor().selectionStart():
+            if font != "mS Shell Dlg 2":
+                self.current_font = font
+
+            self.setFontFamily(self.current_font)
+            if self.sheet1 is not None:
+                self.sheet1.set_font(self.current_font)
+
+        elif font != "mS Shell Dlg 2":# условие для форматирования выделенного текста
             self.current_font = font
-
-        self.setFontFamily(self.current_font)
-
-        if self.sheet1 is not None:
-            self.sheet1.set_font(self.current_font)
-
-
+            self.setFontFamily(self.current_font)
+            if self.sheet1 is not None:
+                self.sheet1.set_font(self.current_font)
 
     def set_size(self, font_size="7"):
-        if font_size != "7":
+        if self.textCursor().selectionEnd() == self.textCursor().selectionStart():
+            if font_size != "7":
+                self.current_size = font_size
+
+            self.setFontPointSize(int(self.current_size))
+            if self.sheet1 is not None:
+                self.sheet1.set_size(self.current_size)
+
+        elif font_size != "7":
             self.current_size = font_size
-
-        self.setFontPointSize(int(self.current_size))
-        if self.sheet1 is not None:
-            self.sheet1.set_font(self.current_size)
-
+            self.setFontPointSize(int(self.current_size))
+            if self.sheet1 is not None:
+                self.sheet1.set_size(self.current_size)
 
     def set_color(self, font_color="black"):
-        if font_color != "black":
-            self.current_color = font_color
+        if self.textCursor().selectionEnd() == self.textCursor().selectionStart():
+            if font_color != "black":
+                self.current_color = font_color
 
+                self.setTextColor(QColor(self.current_color))
+                if self.sheet1 is not None:
+                    self.sheet1.set_color(self.current_color)
+
+        elif font_color != "black":
+            self.current_color = font_color
             self.setTextColor(QColor(self.current_color))
             if self.sheet1 is not None:
-                self.sheet1.set_color(font_color)
-
-
-
+                self.sheet1.set_color(self.current_color)
 
     def count_u(self):
         if self.fontUnderline():
@@ -126,23 +159,17 @@ class Sheet(QTextEdit):
 
     def set_underline(self, c):
         self.setFontUnderline(c)
-        if self.sheet1 is None:
-            pass
-        else:
+        if self.sheet1 is not None:
             self.sheet1.set_underline(c)
 
     def set_bold(self, c):
         self.setFontWeight(c)
-        if self.sheet1 is None:
-            pass
-        else:
+        if self.sheet1 is not None:
             self.sheet1.set_bold(c)
 
     def set_italic(self, c):
         self.setFontItalic(c)
-        if self.sheet1 is None:
-            pass
-        else:
+        if self.sheet1 is not None:
             self.sheet1.set_italic(c)
 
     def contextMenuEvent(self, event):
@@ -152,6 +179,9 @@ class Sheet(QTextEdit):
 
         context_menu.addAction(copy_action)
         context_menu.addAction(insert_action)
+
+        copy_action.triggered.connect(self.copy)
+        insert_action.triggered.connect(self.paste)
 
         context_menu.exec(event.globalPos())
 
