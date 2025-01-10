@@ -13,8 +13,10 @@ from docx.oxml.ns import qn
 
 class Sheet(QTextEdit):
 
-    def __init__(self, sheets_layout):
+    def __init__(self, sheets_layout, previous_sheet=None):
         super().__init__()
+        self.previous_sheet = previous_sheet
+        self.sheets_layout = sheets_layout
         size_policy = QSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
         size_policy.setHorizontalStretch(0)
         size_policy.setVerticalStretch(0)
@@ -42,16 +44,17 @@ class Sheet(QTextEdit):
                     }
                 """)
         self.f = -1
+        self.sheet1 = None
+        self.textChanged.connect(self.check_and_delete_if_empty)
         self.textChanged.connect(lambda: self.check_text_height(sheets_layout))
         self.cursorPositionChanged.connect(self.apply_styles_to_current_sheet)
-        self.sheet1 = None
 
     def check_text_height(self, sheets_layout):
         check = self.cursorRect(self.textCursor()).y() + self.cursorRect().height() * 2
         check2 = self.document().size().height()
         
         if check2 > 1208 and self.sheet1 is None:
-            self.sheet1 = Sheet(sheets_layout)
+            self.sheet1 = Sheet(sheets_layout, previous_sheet=self)
             self.text = self.toPlainText().split("\n")
             self.sheet1.insertPlainText(self.text.pop())
             
@@ -63,13 +66,30 @@ class Sheet(QTextEdit):
             self.sheet1.insertPlainText("\n" + self.text[len(self.text) + self.f])
 
         if check > 1208 and self.sheet1 is None:
-            self.sheet1 = Sheet(sheets_layout)
+            self.sheet1 = Sheet(sheets_layout, previous_sheet=self)
             self.apply_styles_to_sheet(self.sheet1)
             self.move_cursor(self.sheet1)
 
         elif check > 1208:
             self.apply_styles_to_sheet(self.sheet1)
             self.move_cursor(self.sheet1)
+
+    def check_and_delete_if_empty(self):
+        text = self.toPlainText().strip()
+        cursor = self.textCursor()
+        if not text and not cursor.hasSelection():
+            self.remove_sheet()
+
+    def remove_sheet(self):
+        if self.previous_sheet is None:
+            print(2)
+            return
+        self.sheets_layout.removeWidget(self)
+
+        if self.previous_sheet is not None:
+            self.previous_sheet.sheet1 = None
+
+        self.deleteLater()
 
     def apply_styles_to_current_sheet(self):
         self.set_font()
@@ -185,6 +205,12 @@ class Sheet(QTextEdit):
 
         context_menu.exec(event.globalPos())
 
+    def iterate_sheets(self):
+        current_sheet = self
+        while current_sheet:
+            yield current_sheet
+            current_sheet = current_sheet.sheet1
+
 
 class WordProcessor(QMainWindow, Ui_WordProcessor):
     def __init__(self):
@@ -224,12 +250,14 @@ class WordProcessor(QMainWindow, Ui_WordProcessor):
 
     def save_to_path(self, file_path):
         try:
-            html_content = self.sheet.toHtml()
-
             doc = Document()
 
-            doc.styles['Normal'].font.name = 'Calibri'  # Устанавливаем шрифт по умолчанию
+            doc.styles['Normal'].font.name = 'Calibri'
             doc.styles['Normal']._element.rPr.rFonts.set(qn('w:eastAsia'), 'Calibri')
+
+            html_content = ""
+            for sheet in self.sheet.iterate_sheets():
+                html_content += sheet.toHtml()
 
             soup = BeautifulSoup(html_content, "html.parser")
 
@@ -265,11 +293,7 @@ class WordProcessor(QMainWindow, Ui_WordProcessor):
             try:
                 doc = docx.Document(file_path)
                 html_content = ""
-
-                section = doc.sections[0]
-                margins = section.left_margin, section.right_margin, section.top_margin, section.bottom_margin
-                margins_in_pixels = [(margin // 360000) * 48 for margin in margins]
-                self.apply_margins_to_stylesheet(margins_in_pixels)
+                sheet_count = len(doc.paragraphs)
 
                 for paragraph in doc.paragraphs:
                     html_content += "<p>"
@@ -289,11 +313,17 @@ class WordProcessor(QMainWindow, Ui_WordProcessor):
                         if run.font.color.rgb:
                             rgb = run.font.color.rgb
                             style += f"color: #{rgb}; "
-                            print(f"color: #{rgb}; ")
                         html_content += f"<span style='{style}'>{run.text}</span>"
                     html_content += "</p>"
 
-                self.sheet.setHtml(html_content)
+                for sheet in self.sheet.iterate_sheets():
+                    sheet.setPlainText("")
+
+                for i in range(sheet_count):
+                    new_sheet = Sheet(self.sheets_layout)
+                    self.apply_margins_to_stylesheet([0, 0, 0, 0])
+                    new_sheet.setHtml(html_content)
+
                 self.current_file_path = file_path
                 self.statusBar().showMessage(f"Файл открыт: {file_path}", 5000)
             except Exception as e:
