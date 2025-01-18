@@ -1,13 +1,14 @@
 import sys
-from PyQt5.QtWidgets import QApplication, QMainWindow, QFileDialog, QTextEdit, QSizePolicy, QMenu, QAction
+from PyQt5.QtWidgets import QApplication, QMainWindow, QFileDialog, QTextEdit, QSizePolicy, QMenu, QAction, QInputDialog, QMessageBox
 from bs4 import BeautifulSoup
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QUrl
 from PyQt5 import QtCore
-from PyQt5.QtGui import QColor, QFont, QTextCharFormat
+from PyQt5.QtGui import QColor, QFont, QDesktopServices, QTextCursor
 from layoutWordProccessor1 import Ui_WordProcessor
 from docx import Document
 import docx
 from docx.shared import Pt, RGBColor
+from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 
 
@@ -48,6 +49,16 @@ class Sheet(QTextEdit):
         self.textChanged.connect(self.check_and_delete_if_empty)
         self.textChanged.connect(lambda: self.check_text_height(sheets_layout))
         self.cursorPositionChanged.connect(self.apply_styles_to_current_sheet)
+
+
+    def mousePressEvent(self, event):
+        if event.button() == 1:
+            if event.modifiers() == Qt.ControlModifier:
+                cursor = self.cursorForPosition(event.pos())
+                if cursor.charFormat().anchorHref():
+                    url = cursor.charFormat().anchorHref()
+                    QDesktopServices.openUrl(QUrl(url))
+        super().mousePressEvent(event)
 
     def check_text_height(self, sheets_layout):
         check = self.cursorRect(self.textCursor()).y() + self.cursorRect().height() * 2
@@ -192,16 +203,83 @@ class Sheet(QTextEdit):
         if self.sheet1 is not None:
             self.sheet1.set_italic(c)
 
+    def add_hyperlink(self):
+        cursor = self.textCursor()
+        selected_text = cursor.selectedText()
+
+        if not selected_text:
+            QMessageBox.warning(self, "Ошибка", "Выберите текст для добавления гиперссылки.")
+            return
+
+        url, ok = QInputDialog.getText(self, "Добавить гиперссылку", "Введите URL:")
+        if ok and url:
+            char_format = cursor.charFormat()
+            html_link = f'<a href="{url}" style="color: blue; ' \
+                        f'font-size: {char_format.font().pointSize()}pt; ' \
+                        f'font-family: {char_format.font().family()}; ' \
+                        f'font-weight: {"bold" if char_format.font().bold() else "normal"}; ' \
+                        f'font-style: {"italic" if char_format.font().italic() else "normal"}; ' \
+                        f'text-decoration: underline;">{selected_text}</a>'
+            cursor.insertHtml(html_link)
+
+    def open_hyperlink(self):
+        cursor = self.textCursor()
+        selected_text = cursor.selectedText()
+
+        if selected_text:
+            if selected_text.startswith('<a href="') and selected_text.endswith('</a>'):
+                start_index = selected_text.find('href="') + len('href="')
+                end_index = selected_text.find('"', start_index)
+                url = selected_text[start_index:end_index]
+
+                QDesktopServices.openUrl(QUrl(url))
+
+    def remove_hyperlink(self):
+        """Удаляет гиперссылку, но оставляет текст."""
+        cursor = self.textCursor()
+        char_format = cursor.charFormat()
+
+        if not char_format.anchorHref():
+            QMessageBox.warning(self, "Ошибка", "Гиперссылка не найдена.")
+            return
+
+        target_url = char_format.anchorHref()
+
+        cursor.beginEditBlock()
+        cursor.movePosition(QTextCursor.Start)
+        while not cursor.atEnd():
+            cursor.movePosition(QTextCursor.NextCharacter, QTextCursor.KeepAnchor)
+            char_format = cursor.charFormat()
+            if char_format.anchorHref() == target_url:
+                char_format.setAnchor(False)
+                char_format.setAnchorHref("")
+                cursor.setCharFormat(char_format)
+        cursor.endEditBlock()
+
     def contextMenuEvent(self, event):
         context_menu = QMenu(self)
         copy_action = QAction("Копировать", self)
         insert_action = QAction("Вставить", self)
+        hyperlink_action = QAction("Добавить гиперссылку", self)
+        go_to_link_action = QAction("Перейти по гиперссылке", self)
+        remove_hyperlink_action = QAction("Удалить гиперссылку", self)
 
         context_menu.addAction(copy_action)
         context_menu.addAction(insert_action)
+        context_menu.addAction(hyperlink_action)
+        context_menu.addAction(go_to_link_action)
+
+        cursor = self.textCursor()
+        char_format = cursor.charFormat()
+        if char_format.anchorHref():  # Проверяем, есть ли гиперссылка
+            context_menu.addAction(go_to_link_action)
+            context_menu.addAction(remove_hyperlink_action)  # Добавляем опцию удаления ссылки
 
         copy_action.triggered.connect(self.copy)
         insert_action.triggered.connect(self.paste)
+        hyperlink_action.triggered.connect(self.add_hyperlink)
+        go_to_link_action.triggered.connect(self.open_hyperlink)
+        remove_hyperlink_action.triggered.connect(self.remove_hyperlink)  # Удаление ссылки
 
         context_menu.exec(event.globalPos())
 
@@ -259,6 +337,7 @@ class WordProcessor(QMainWindow, Ui_WordProcessor):
             for sheet in self.sheet.iterate_sheets():
                 html_content += sheet.toHtml()
 
+            print(html_content)
             soup = BeautifulSoup(html_content, "html.parser")
 
             for line in soup.find_all("p"):
