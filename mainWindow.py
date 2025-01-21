@@ -3,13 +3,16 @@ from PyQt5.QtWidgets import QApplication, QMainWindow, QFileDialog, QTextEdit, Q
 from bs4 import BeautifulSoup
 from PyQt5.QtCore import Qt, QUrl
 from PyQt5 import QtCore
-from PyQt5.QtGui import QColor, QFont, QDesktopServices, QTextCursor
+from PyQt5.QtGui import QColor, QFont, QDesktopServices, QTextCursor, QImage, QTextImageFormat
 from layoutWordProccessor1 import Ui_WordProcessor
 from docx import Document
-import docx
+from docx2pdf import convert
+import os
+import tempfile
 from docx.shared import Pt, RGBColor
-from docx.oxml import OxmlElement
+from PyPDF2 import PdfReader
 from docx.oxml.ns import qn
+import base64
 
 
 class Sheet(QTextEdit):
@@ -235,7 +238,6 @@ class Sheet(QTextEdit):
                 QDesktopServices.openUrl(QUrl(url))
 
     def remove_hyperlink(self):
-        """Удаляет гиперссылку, но оставляет текст."""
         cursor = self.textCursor()
         char_format = cursor.charFormat()
 
@@ -256,6 +258,29 @@ class Sheet(QTextEdit):
                 cursor.setCharFormat(char_format)
         cursor.endEditBlock()
 
+    def insert_image(self):
+        file_dialog = QFileDialog(self)
+        file_dialog.setNameFilter("Изображения (*.png *.jpg *.jpeg *.bmp *.gif)")
+        file_dialog.setFileMode(QFileDialog.ExistingFile)
+        if file_dialog.exec():
+            image_path = file_dialog.selectedFiles()[0]
+            image = QImage(image_path)
+
+            if image.isNull():
+                QMessageBox.warning(self, "Ошибка", "Не удалось загрузить изображение.")
+                return
+
+            max_width = 500
+            if image.width() > max_width:
+                image = image.scaledToWidth(max_width, Qt.SmoothTransformation)
+
+            cursor = self.textCursor()
+            image_format = QTextImageFormat()
+            image_format.setName(image_path)
+            image_format.setWidth(image.width())
+            image_format.setHeight(image.height())
+            cursor.insertImage(image_format)
+
     def contextMenuEvent(self, event):
         context_menu = QMenu(self)
         copy_action = QAction("Копировать", self)
@@ -263,23 +288,26 @@ class Sheet(QTextEdit):
         hyperlink_action = QAction("Добавить гиперссылку", self)
         go_to_link_action = QAction("Перейти по гиперссылке", self)
         remove_hyperlink_action = QAction("Удалить гиперссылку", self)
+        insert_image_action = QAction("Вставить изображение", self)
 
         context_menu.addAction(copy_action)
         context_menu.addAction(insert_action)
         context_menu.addAction(hyperlink_action)
         context_menu.addAction(go_to_link_action)
+        context_menu.addAction(insert_image_action)
 
         cursor = self.textCursor()
         char_format = cursor.charFormat()
-        if char_format.anchorHref():  # Проверяем, есть ли гиперссылка
+        if char_format.anchorHref():
             context_menu.addAction(go_to_link_action)
-            context_menu.addAction(remove_hyperlink_action)  # Добавляем опцию удаления ссылки
+            context_menu.addAction(remove_hyperlink_action)
 
         copy_action.triggered.connect(self.copy)
         insert_action.triggered.connect(self.paste)
         hyperlink_action.triggered.connect(self.add_hyperlink)
         go_to_link_action.triggered.connect(self.open_hyperlink)
-        remove_hyperlink_action.triggered.connect(self.remove_hyperlink)  # Удаление ссылки
+        remove_hyperlink_action.triggered.connect(self.remove_hyperlink)
+        insert_image_action.triggered.connect(self.insert_image)
 
         context_menu.exec(event.globalPos())
 
@@ -307,6 +335,7 @@ class WordProcessor(QMainWindow, Ui_WordProcessor):
 
         self.save_document_action.triggered.connect(self.save_fast)
         self.save_document_where_action.triggered.connect(self.save_as_docx)
+        self.save_document_where_pdf_action.triggered.connect(self.pdf_to_path)
         self.open_document_action.triggered.connect(self.open_document)
         self.add_document_action.triggered.connect(self.add_new_document)
 
@@ -342,38 +371,71 @@ class WordProcessor(QMainWindow, Ui_WordProcessor):
 
             for line in soup.find_all("p"):
                 paragraph = doc.add_paragraph()
-                for span in line.find_all("span"):
-                    run = paragraph.add_run(span.text)
-                    style = span.attrs.get("style", "")
-                    if "font-size" in style:
-                        size = int(style.split("font-size:")[1].split("pt")[0])
-                        run.font.size = Pt(size)
-                    if "font-family" in style:
-                        font_name = style.split("font-family:")[1].split(";")[0].replace("'", "")
-                        run.font.name = font_name
-                    if "font-weight" in style and "bold" in style.lower():
-                        run.bold = True
-                    if "font-style" in style and "italic" in style.lower():
-                        run.italic = True
-                    if "text-decoration" in style and "underline" in style.lower():
-                        run.underline = True
-                    if "color" in style:
-                        color_value = style.split("color:")[1].split(";")[0].strip()
-                        run.font.color.rgb = RGBColor(int(color_value[1:3], 16), int(color_value[3:5], 16), int(color_value[5:7], 16))
+                for element in line.contents:
+                    if element.name == "span":
+                        run = paragraph.add_run(element.text)
+                        style = element.attrs.get("style", "")
+                        if "font-size" in style:
+                            size = int(style.split("font-size:")[1].split("pt")[0])
+                            run.font.size = Pt(size)
+                        if "font-family" in style:
+                            font_name = style.split("font-family:")[1].split(";")[0].replace("'", "")
+                            run.font.name = font_name
+                        if "font-weight" in style and "bold" in style.lower():
+                            run.bold = True
+                        if "font-style" in style and "italic" in style.lower():
+                            run.italic = True
+                        if "text-decoration" in style and "underline" in style.lower():
+                            run.underline = True
+                        if "color" in style:
+                            color_value = style.split("color:")[1].split(";")[0].strip()
+                            run.font.color.rgb = RGBColor(int(color_value[1:3], 16), int(color_value[3:5], 16), int(color_value[5:7], 16))
+
+                    elif element.name == "img":
+                        src = element.get('src', '')
+                        if os.path.isfile(src):
+                            paragraph.add_run().add_picture(src)
 
             doc.save(file_path)
             self.statusBar().showMessage(f"Файл сохранен: {file_path}", 5000)
         except Exception as e:
             self.statusBar().showMessage(f"Ошибка сохранения: {e}", 5000)
 
+    def pdf_to_path(self):
+        pdf_path, _ = QFileDialog.getSaveFileName(self, "Экспортировать как PDF в...", "", "Документ PDF (*.pdf)")
+        docx_path = pdf_path.replace(".pdf", ".docx")
+        if docx_path:
+            self.save_to_path(docx_path)
+
+        convert(docx_path, pdf_path)
+        os.remove(docx_path)
+
+    def convert_to_pdf(self, docx_path, pdf_path):
+        try:
+            convert(docx_path, pdf_path)
+            print(f"PDF сохранён: {pdf_path}")
+            return True
+        except Exception as e:
+            print(f"Ошибка при конвертации в PDF: {e}")
+            return False
+
     def open_document(self):
         file_path, _ = QFileDialog.getOpenFileName(self, "Открыть документ...", "", "Документ Word (*.docx)")
         if file_path:
             try:
-                doc = docx.Document(file_path)
-                html_content = ""
-                sheet_count = len(doc.paragraphs)
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_pdf_file:
+                    temp_pdf_path = temp_pdf_file.name
 
+                if not self.convert_to_pdf(file_path, temp_pdf_path):
+                    raise Exception("Не удалось конвертировать файл в PDF.")
+
+                reader = PdfReader(temp_pdf_path)
+                page_count = len(reader.pages)
+
+                os.remove(temp_pdf_path)
+
+                doc = Document(file_path)
+                html_content = ""
                 for paragraph in doc.paragraphs:
                     html_content += "<p>"
                     for run in paragraph.runs:
@@ -393,20 +455,30 @@ class WordProcessor(QMainWindow, Ui_WordProcessor):
                             rgb = run.font.color.rgb
                             style += f"color: #{rgb}; "
                         html_content += f"<span style='{style}'>{run.text}</span>"
+
+                    for rel in doc.part.rels.values():
+                        if "image" in rel.target_ref:
+                            image_data = rel.target_part.blob
+                            encoded_image = base64.b64encode(image_data).decode('utf-8')
+                            html_content += f"<img src='data:image/png;base64,{encoded_image}' style='display:block; margin: 10px 0;' />"
+
                     html_content += "</p>"
 
                 for sheet in self.sheet.iterate_sheets():
                     sheet.setPlainText("")
 
-                for i in range(sheet_count):
+                for i in range(page_count):
                     new_sheet = Sheet(self.sheets_layout)
+                    print(self.sheets_layout)
                     self.apply_margins_to_stylesheet([0, 0, 0, 0])
                     new_sheet.setHtml(html_content)
 
                 self.current_file_path = file_path
                 self.statusBar().showMessage(f"Файл открыт: {file_path}", 5000)
+
             except Exception as e:
                 self.statusBar().showMessage(f"Ошибка открытия: {e}", 5000)
+                QMessageBox.critical(self, "Ошибка", f"Не удалось открыть файл: {e}")
 
     def apply_margins_to_stylesheet(self, margins_in_pixels):
         left_margin, right_margin, top_margin, bottom_margin = margins_in_pixels

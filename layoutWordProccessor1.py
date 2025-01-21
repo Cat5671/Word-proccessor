@@ -238,10 +238,13 @@ class Ui_WordProcessor(object):
         self.save_document_action.setObjectName("save_document_action")
         self.save_document_where_action = QtWidgets.QAction(WordProccessor)
         self.save_document_where_action.setObjectName("save_document_where_action")
+        self.save_document_where_pdf_action = QtWidgets.QAction(WordProccessor)
+        self.save_document_where_pdf_action.setObjectName("save_document_where_pdf_action")
         self.menu.addAction(self.add_document_action)
         self.menu.addAction(self.open_document_action)
         self.menu.addAction(self.save_document_action)
         self.menu.addAction(self.save_document_where_action)
+        self.menu.addAction(self.save_document_where_pdf_action)
         self.menu_bar.addAction(self.menu.menuAction())
 
         self.retranslateUi(WordProccessor)
@@ -278,3 +281,4 @@ class Ui_WordProcessor(object):
         self.open_document_action.setText(_translate("WordProccessor", "Открыть..."))
         self.save_document_action.setText(_translate("WordProccessor", "Сохранить"))
         self.save_document_where_action.setText(_translate("WordProccessor", "Сохранить как..."))
+        self.save_document_where_pdf_action.setText(_translate("WordProccessor", "Экспортировать в PDF..."))
