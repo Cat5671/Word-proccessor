@@ -1,9 +1,10 @@
 import sys
-from PyQt5.QtWidgets import QApplication, QMainWindow, QFileDialog, QTextEdit, QSizePolicy, QMenu, QAction, QInputDialog, QMessageBox
+from PyQt5.QtWidgets import QApplication, QMainWindow, QFileDialog, QTextEdit, QSizePolicy, QMenu, QAction, \
+    QInputDialog, QMessageBox
 from bs4 import BeautifulSoup
-from PyQt5.QtCore import Qt, QUrl
+from PyQt5.QtCore import Qt, QUrl, QRegExp
 from PyQt5 import QtCore
-from PyQt5.QtGui import QColor, QFont, QDesktopServices, QTextCursor, QImage, QTextImageFormat
+from PyQt5.QtGui import QColor, QFont, QDesktopServices, QTextCursor, QImage, QTextImageFormat, QTextCharFormat, QBrush
 from layoutWordProccessor1 import Ui_WordProcessor
 from docx import Document
 from docx2pdf import convert
@@ -53,7 +54,6 @@ class Sheet(QTextEdit):
         self.textChanged.connect(lambda: self.check_text_height(sheets_layout))
         self.cursorPositionChanged.connect(self.apply_styles_to_current_sheet)
 
-
     def mousePressEvent(self, event):
         if event.button() == 1:
             if event.modifiers() == Qt.ControlModifier:
@@ -66,12 +66,12 @@ class Sheet(QTextEdit):
     def check_text_height(self, sheets_layout):
         check = self.cursorRect(self.textCursor()).y() + self.cursorRect().height() * 2
         check2 = self.document().size().height()
-        
+
         if check2 > 1208 and self.sheet1 is None:
             self.sheet1 = Sheet(sheets_layout, previous_sheet=self)
             self.text = self.toPlainText().split("\n")
             self.sheet1.insertPlainText(self.text.pop())
-            
+
         elif check2 > 1208:
             if check > 1208:
                 self.f -= 1
@@ -137,7 +137,7 @@ class Sheet(QTextEdit):
             if self.sheet1 is not None:
                 self.sheet1.set_font(self.current_font)
 
-        elif font != "mS Shell Dlg 2":# условие для форматирования выделенного текста
+        elif font != "mS Shell Dlg 2":  # условие для форматирования выделенного текста
             self.current_font = font
             self.setFontFamily(self.current_font)
             if self.sheet1 is not None:
@@ -317,6 +317,48 @@ class Sheet(QTextEdit):
             yield current_sheet
             current_sheet = current_sheet.sheet1
 
+    def find_word(self, word):
+
+        cursor = self.textCursor()
+        cursor.setPosition(0)
+        format = QTextCharFormat()
+        format.setBackground(QBrush(QColor("white")))
+        cursor.movePosition(QTextCursor.End, 1)
+        cursor.mergeCharFormat(format)
+
+        if word != "":
+            cursor = self.textCursor()
+            format = QTextCharFormat()
+            format.setBackground(QBrush(QColor("yellow")))
+            regex = QtCore.QRegExp(word)
+            index = regex.indexIn(self.toPlainText(), 0)
+
+            while index != -1:
+                cursor.setPosition(index)
+                for _ in word:
+                    cursor.movePosition(QTextCursor.Right, 1)
+                cursor.mergeCharFormat(format)
+                pos = index + regex.matchedLength()
+                index = regex.indexIn(self.toPlainText(), pos)
+
+        if self.sheet1 is not None:
+            self.sheet1.find_word(word)
+
+    def replace_word(self, word, replaced_word):
+        if word != "":
+            cursor = self.textCursor()
+            index = QRegExp(word).indexIn(self.toPlainText(), 0)
+
+            if index != -1:
+                cursor.setPosition(index)
+                for _ in word:
+                    cursor.movePosition(QTextCursor.Right, 1)
+                cursor.removeSelectedText()
+                cursor.insertText(replaced_word)
+            else:
+                if self.sheet1 is not None:
+                    self.sheet1.replace_word(word, replaced_word)
+
 
 class WordProcessor(QMainWindow, Ui_WordProcessor):
     def __init__(self):
@@ -332,6 +374,9 @@ class WordProcessor(QMainWindow, Ui_WordProcessor):
         self.underline_text_button.clicked.connect(self.sheet.count_u)
         self.italic_text_button.clicked.connect(self.sheet.count_i)
         self.bold_text_button.clicked.connect(self.sheet.count_b)
+        self.button_search_word.clicked.connect(lambda: self.sheet.find_word(self.word_search_field.text()))
+        self.button_replace_field.clicked.connect(lambda: self.sheet.replace_word(self.word_search_field.text(),
+                                                                            self.word_replace_field.text()))
 
         self.save_document_action.triggered.connect(self.save_fast)
         self.save_document_where_action.triggered.connect(self.save_as_docx)
@@ -389,7 +434,8 @@ class WordProcessor(QMainWindow, Ui_WordProcessor):
                             run.underline = True
                         if "color" in style:
                             color_value = style.split("color:")[1].split(";")[0].strip()
-                            run.font.color.rgb = RGBColor(int(color_value[1:3], 16), int(color_value[3:5], 16), int(color_value[5:7], 16))
+                            run.font.color.rgb = RGBColor(int(color_value[1:3], 16), int(color_value[3:5], 16),
+                                                          int(color_value[5:7], 16))
 
                     elif element.name == "img":
                         src = element.get('src', '')
@@ -491,7 +537,6 @@ class WordProcessor(QMainWindow, Ui_WordProcessor):
                     padding-bottom: {bottom_margin}px;
                 }}
             """)
-
 
 
 app = QApplication(sys.argv)
