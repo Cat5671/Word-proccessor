@@ -1,4 +1,7 @@
+import os
+import tempfile
 import sys
+import base64
 from PyQt5.QtWidgets import QApplication, QMainWindow, QFileDialog, QTextEdit, QSizePolicy, QMenu, QAction, \
     QInputDialog, QMessageBox, QLabel
 from bs4 import BeautifulSoup
@@ -6,17 +9,14 @@ from PyQt5.QtCore import Qt, QUrl, QRegExp
 from PyQt5 import QtCore
 from PyQt5.QtGui import QColor, QFont, QDesktopServices, QTextCursor, QImage, QTextImageFormat, QTextCharFormat, QBrush, \
     QTextBlockFormat
-from docx.oxml import OxmlElement, ns
-
-from layoutWordProccessor1 import Ui_WordProcessor
+from PIL import Image
+from PyPDF2 import PdfReader
 from docx import Document
 from docx2pdf import convert
-import os
-import tempfile
 from docx.shared import Pt, RGBColor
-from PyPDF2 import PdfReader
+from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
-import base64
+from layoutWordProccessor1 import Ui_WordProcessor
 
 
 class Sheet(QTextEdit):
@@ -479,7 +479,12 @@ class WordProcessor(QMainWindow, Ui_WordProcessor):
                     elif element.name == "img":
                         src = element.get('src', '')
                         if os.path.isfile(src):
-                            paragraph.add_run().add_picture(src)
+                            with Image.open(src) as img:
+                                img.thumbnail((330, 330), Image.BILINEAR)
+                                img_path = "temp_" + os.path.basename(src)
+                                img.save(img_path)
+                            paragraph.add_run().add_picture(img_path)
+                            os.remove(img_path)
 
             if self.is_page_numbering_enabled:
                 footer_paragraph = doc.sections[0].footer.paragraphs[0]
