@@ -1,1 +1,1 @@
-pyuic5 layoutWordProccessor.ui -o layoutWordProccessor.py
+pyuic5 layoutWordProccessor1.ui -o layoutWordP.py

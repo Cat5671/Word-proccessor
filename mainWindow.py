@@ -1,10 +1,13 @@
 import sys
 from PyQt5.QtWidgets import QApplication, QMainWindow, QFileDialog, QTextEdit, QSizePolicy, QMenu, QAction, \
-    QInputDialog, QMessageBox
+    QInputDialog, QMessageBox, QLabel
 from bs4 import BeautifulSoup
 from PyQt5.QtCore import Qt, QUrl, QRegExp
 from PyQt5 import QtCore
-from PyQt5.QtGui import QColor, QFont, QDesktopServices, QTextCursor, QImage, QTextImageFormat, QTextCharFormat, QBrush
+from PyQt5.QtGui import QColor, QFont, QDesktopServices, QTextCursor, QImage, QTextImageFormat, QTextCharFormat, QBrush, \
+    QTextBlockFormat
+from docx.oxml import OxmlElement, ns
+
 from layoutWordProccessor1 import Ui_WordProcessor
 from docx import Document
 from docx2pdf import convert
@@ -48,6 +51,16 @@ class Sheet(QTextEdit):
                         padding-bottom: 96px;   /* Отступ снизу (1.27 см) */              
                     }
                 """)
+
+        self.page_label = QLabel(f"{self.sheets_layout.indexOf(self) + 1}", self)
+        self.page_label.setStyleSheet("color: black; font-size: 26px; background-color: white;")
+        self.page_label.setAttribute(Qt.WA_TransparentForMouseEvents)
+        self.page_label_position = "center"
+        self.page_label.resize(100, 30)
+        self.page_label.move(463, 1260)
+        self.page_label.hide()
+        self.is_page_numbering_enabled = False
+
         self.f = -1
         self.sheet1 = None
         self.textChanged.connect(self.check_and_delete_if_empty)
@@ -62,6 +75,13 @@ class Sheet(QTextEdit):
                     url = cursor.charFormat().anchorHref()
                     QDesktopServices.openUrl(QUrl(url))
         super().mousePressEvent(event)
+
+    def toggle_page_numbers(self, enable):
+        self.is_page_numbering_enabled = enable
+        if enable:
+            self.page_label.show()
+        else:
+            self.page_label.hide()
 
     def check_text_height(self, sheets_layout):
         check = self.cursorRect(self.textCursor()).y() + self.cursorRect().height() * 2
@@ -225,18 +245,6 @@ class Sheet(QTextEdit):
                         f'text-decoration: underline;">{selected_text}</a>'
             cursor.insertHtml(html_link)
 
-    def open_hyperlink(self):
-        cursor = self.textCursor()
-        selected_text = cursor.selectedText()
-
-        if selected_text:
-            if selected_text.startswith('<a href="') and selected_text.endswith('</a>'):
-                start_index = selected_text.find('href="') + len('href="')
-                end_index = selected_text.find('"', start_index)
-                url = selected_text[start_index:end_index]
-
-                QDesktopServices.openUrl(QUrl(url))
-
     def remove_hyperlink(self):
         cursor = self.textCursor()
         char_format = cursor.charFormat()
@@ -281,35 +289,54 @@ class Sheet(QTextEdit):
             image_format.setHeight(image.height())
             cursor.insertImage(image_format)
 
+
+
     def contextMenuEvent(self, event):
         context_menu = QMenu(self)
         copy_action = QAction("Копировать", self)
         insert_action = QAction("Вставить", self)
         hyperlink_action = QAction("Добавить гиперссылку", self)
-        go_to_link_action = QAction("Перейти по гиперссылке", self)
         remove_hyperlink_action = QAction("Удалить гиперссылку", self)
+        set_line_spacing_action = QAction("Изменить межстрочный интервал", self)
         insert_image_action = QAction("Вставить изображение", self)
 
         context_menu.addAction(copy_action)
         context_menu.addAction(insert_action)
         context_menu.addAction(hyperlink_action)
-        context_menu.addAction(go_to_link_action)
+        context_menu.addAction(set_line_spacing_action)
         context_menu.addAction(insert_image_action)
 
         cursor = self.textCursor()
         char_format = cursor.charFormat()
         if char_format.anchorHref():
-            context_menu.addAction(go_to_link_action)
             context_menu.addAction(remove_hyperlink_action)
 
         copy_action.triggered.connect(self.copy)
         insert_action.triggered.connect(self.paste)
         hyperlink_action.triggered.connect(self.add_hyperlink)
-        go_to_link_action.triggered.connect(self.open_hyperlink)
         remove_hyperlink_action.triggered.connect(self.remove_hyperlink)
+        set_line_spacing_action.triggered.connect(self.set_line_spacing)
         insert_image_action.triggered.connect(self.insert_image)
 
         context_menu.exec(event.globalPos())
+
+    def set_line_spacing(self):
+        cursor = self.textCursor()
+        if not cursor.hasSelection():
+            QMessageBox.warning(self, "Ошибка", "Выделите текст, чтобы задать межстрочный интервал.")
+            return
+
+        spacing, ok = QInputDialog.getDouble(
+            self,
+            "Выставить межстрочный интервал",
+            "Введите размер межстрочного интервала (например, 1.0):",
+            1.0, 0.5, 5.0, 1
+        )
+        if ok:
+            block_format = cursor.blockFormat()
+            block_format.setLineHeight(int(spacing * 100), QTextBlockFormat.ProportionalHeight)
+            cursor.mergeBlockFormat(block_format)
+            self.setTextCursor(cursor)
 
     def iterate_sheets(self):
         current_sheet = self
@@ -378,6 +405,10 @@ class WordProcessor(QMainWindow, Ui_WordProcessor):
         self.button_replace_field.clicked.connect(lambda: self.sheet.replace_word(self.word_search_field.text(),
                                                                             self.word_replace_field.text()))
 
+        self.is_page_numbering_enabled = False
+        self.numbering_button.setCheckable(True)
+        self.numbering_button.clicked.connect(self.toggle_page_numbers)
+
         self.save_document_action.triggered.connect(self.save_fast)
         self.save_document_where_action.triggered.connect(self.save_as_docx)
         self.save_document_where_pdf_action.triggered.connect(self.pdf_to_path)
@@ -387,6 +418,14 @@ class WordProcessor(QMainWindow, Ui_WordProcessor):
     def add_new_document(self):
         self.current_file_path = None
         self.sheet.setPlainText("")
+
+    def toggle_page_numbers(self):
+        self.is_page_numbering_enabled = self.numbering_button.isChecked()
+
+        for i in range(self.sheets_layout.count()):
+            sheet = self.sheets_layout.itemAt(i).widget()
+            if isinstance(sheet, Sheet):
+                sheet.toggle_page_numbers(self.is_page_numbering_enabled)
 
     def save_fast(self):
         if self.current_file_path:
@@ -442,10 +481,31 @@ class WordProcessor(QMainWindow, Ui_WordProcessor):
                         if os.path.isfile(src):
                             paragraph.add_run().add_picture(src)
 
+            if self.is_page_numbering_enabled:
+                footer_paragraph = doc.sections[0].footer.paragraphs[0]
+                run = footer_paragraph.add_run()
+
+                fldChar1 = OxmlElement('w:fldChar')
+                fldChar1.set(qn('w:fldCharType'), 'begin')
+                run._r.append(fldChar1)
+
+                instrText = OxmlElement('w:instrText')
+                instrText.set(qn('xml:space'), 'preserve')
+                instrText.text = "PAGE"
+                run._r.append(instrText)
+
+                fldChar2 = OxmlElement('w:fldChar')
+                fldChar2.set(qn('w:fldCharType'), 'end')
+                run._r.append(fldChar2)
+
+                run.font.size = Pt(12)
+                footer_paragraph.alignment = 1
+
             doc.save(file_path)
             self.statusBar().showMessage(f"Файл сохранен: {file_path}", 5000)
         except Exception as e:
             self.statusBar().showMessage(f"Ошибка сохранения: {e}", 5000)
+            print(e)
 
     def pdf_to_path(self):
         pdf_path, _ = QFileDialog.getSaveFileName(self, "Экспортировать как PDF в...", "", "Документ PDF (*.pdf)")
