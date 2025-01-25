@@ -300,6 +300,7 @@ class Sheet(QTextEdit):
         set_line_spacing_action = QAction("Изменить межстрочный интервал", self)
         insert_image_action = QAction("Вставить изображение", self)
 
+
         context_menu.addAction(copy_action)
         context_menu.addAction(insert_action)
         context_menu.addAction(hyperlink_action)
@@ -311,14 +312,40 @@ class Sheet(QTextEdit):
         if char_format.anchorHref():
             context_menu.addAction(remove_hyperlink_action)
 
+        styles_menu = QMenu("Пользовательские стили", self)
+        heading1_action = QAction("Заголовок 1", self)
+        heading2_action = QAction("Заголовок 2", self)
+
+        styles_menu.addAction(heading1_action)
+        styles_menu.addAction(heading2_action)
+        context_menu.addMenu(styles_menu)
+
         copy_action.triggered.connect(self.copy)
         insert_action.triggered.connect(self.paste)
         hyperlink_action.triggered.connect(self.add_hyperlink)
         remove_hyperlink_action.triggered.connect(self.remove_hyperlink)
         set_line_spacing_action.triggered.connect(self.set_line_spacing)
         insert_image_action.triggered.connect(self.insert_image)
+        heading1_action.triggered.connect(lambda: self.apply_custom_style("heading1"))
+        heading2_action.triggered.connect(lambda: self.apply_custom_style("heading2"))
 
         context_menu.exec(event.globalPos())
+
+    def apply_custom_style(self, style):
+        cursor = self.textCursor()
+        if style == "heading1":
+            font = QFont("Arial", 22, QFont.Bold)
+            cursor.mergeCharFormat(self.create_char_format(font, "#000080", underline=False))
+        elif style == "heading2":
+            font = QFont("Arial", 18, QFont.Normal, italic=True)
+            cursor.mergeCharFormat(self.create_char_format(font, "#008000", underline=False))
+
+    def create_char_format(self, font, color, underline=False):
+        char_format = QTextCharFormat()
+        char_format.setFont(font)
+        char_format.setForeground(QColor(color))
+        char_format.setFontUnderline(underline)
+        return char_format
 
     def set_line_spacing(self):
         cursor = self.textCursor()
@@ -393,6 +420,8 @@ class WordProcessor(QMainWindow, Ui_WordProcessor):
         self.setup_ui(self)
         self.resize(800, 600)
         self.current_file_path = None
+        self.back_button.hide()
+        self.copy_button.hide()
 
         self.sheet = Sheet(self.sheets_layout)
         self.fonts.currentTextChanged.connect(self.sheet.set_font)
